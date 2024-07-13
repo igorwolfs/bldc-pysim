@@ -68,7 +68,7 @@ elif pset == 3: #modified psim
     NbPoles = 4.                  #
     dvf = .0                      # aka. freewheeling diode forward voltage
 else:
-    print "Unknown pset {}".format(pset)
+    print("Unknown pset %d", pset)
 
 # Components of the state vector
 sv_theta  = 0      # angle of the rotor
@@ -145,7 +145,7 @@ def backemf(X,thetae_offset):
     elif (math.pi * (11./6.)) < phase_thetae <= (2.0 * math.pi):
         bemf = (max_bemf/(math.pi/6.)) * (phase_thetae - (2. * math.pi))
     else:
-        print "ERROR: angle out of bounds can not calculate bemf {}".format(phase_thetae)
+        print("ERROR: angle out of bounds can not calculate bemf %d", phase_thetae)
 
     return bemf
 
@@ -381,9 +381,9 @@ def dyn_debug(X, t, U, W):
     elif (mtorque >= W[pv_friction]):
         mtorque = mtorque - W[pv_friction]
     elif ((mtorque < 0) and (mtorque >= (-W[pv_friction]))):
-	mtorque = 0
+	    mtorque = 0
     elif (mtorque <= (-W[pv_friction])):
-	mtorque = mtorque + W[pv_friction]
+        mtorque = mtorque + W[pv_friction]
 
     # Acceleration of the rotor
     omega_dot = mtorque / Inertia

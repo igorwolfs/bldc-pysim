@@ -19,7 +19,7 @@
 #
 
 import matplotlib
-matplotlib.use('MacOSX')
+#matplotlib.use('MacOSX')
 #matplotlib.use('GTKCairo')
 import numpy as np
 import pylab as pl
@@ -56,7 +56,7 @@ def print_simulation_progress(count, steps):
         sim_perc_last = ((count-1)*100) / steps
         sim_perc = (count*100) / steps
         if (sim_perc_last != sim_perc):
-            print "{}%".format(sim_perc)
+            print(f"{sim_perc}")
 
 def drop_it(a, factor):
 	new = []

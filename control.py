@@ -144,7 +144,7 @@ def run_hpwm_l_on_bipol(Sp, Y, t):
         lw = 0
         step = "1a"
     else:
-        print 'ERROR: The electrical angle is out of range!!!'
+        print('ERROR: The electrical angle is out of range!!!')
 
     # Assigning the scheme phase values to the simulator phases
     # "Connecting the controller wires to the motor" ^^
@@ -157,7 +157,7 @@ def run_hpwm_l_on_bipol(Sp, Y, t):
     U[dm.iv_lw] = lv
 
     if debug:
-        print 'time {} step {} eangle {} switches {}'.format(t, step, mu.deg_of_rad(elec_angle), U)
+        print(f'time {t} step {step} eangle {mu.deg_of_rad(elec_angle)} switches {U}')
 
     return U
 
@@ -182,7 +182,7 @@ def run_hpwm_l_on(Sp, Y, t):
         lu = 0
         if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
             hw = 1
-	    lw = 0
+            lw = 0
             hv = 0
             lv = 1
         else:
@@ -197,12 +197,12 @@ def run_hpwm_l_on(Sp, Y, t):
         # W off
         if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
             hu = 1
-	    lu = 0
+            lu = 0
             hv = 0
             lv = 1
         else:
             hu = 0
-	    lu = 1
+            lu = 1
             hv = 1
             lv = 0
         hw = 0
@@ -294,7 +294,7 @@ def run_hpwm_l_on(Sp, Y, t):
             lv = 0
         step = "1a"
     else:
-        print 'ERROR: The electrical angle is out of range!!!'
+        print('ERROR: The electrical angle is out of range!!!')
 
     # Assigning the scheme phase values to the simulator phases
     # "Connecting the controller wires to the motor" ^^
@@ -307,7 +307,7 @@ def run_hpwm_l_on(Sp, Y, t):
     U[dm.iv_lw] = lv
 
     if debug:
-        print 'time {} step {} eangle {} switches {}'.format(t, step, mu.deg_of_rad(elec_angle), U)
+        print(f'time {t} step {step} eangle {mu.deg_of_rad(elec_angle)} switches {U}')
 
     return U
 
