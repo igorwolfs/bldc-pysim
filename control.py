@@ -314,7 +314,6 @@ def run_hpwm_l_on(Sp, Y, t):
 
 
 #
-#
 # Sp setpoint, Y output
 #
 def run(Sp, Y, t):

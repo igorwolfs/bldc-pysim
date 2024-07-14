@@ -80,6 +80,7 @@ def main():
     # INPUT VECTOR (which phases are excited)
     U = np.zeros((time.size, config.N_SWITCHES))
 
+    # EMF's and phase voltages
     V_arr = np.zeros((time.size, config.N_DEBUG_VARS))
 
     X[0,:] = config.X0
@@ -90,7 +91,10 @@ def main():
         else:
             Uim2 = U[i-2,:]
 
+        # Get phase voltages, angle and rot-speed at t=i-1
         Y[i-1,:] = dm.output(X[i-1,:], Uim2)                  # get the output for the last step
+        
+        # 
         U[i-1,:] = ctl.run(0, Y[i-1,:], time[i-1])            # run the controller for the last step
         
         '''

@@ -94,7 +94,9 @@ def get_phase_voltages(X, U):
 
     # u, v, w, m
     V_arr = np.zeros(4)
-
+    if (not np.any(ph_en)):
+        return V_arr # Voltage is zero when nothing is yet enabled
+    
     # Case where 3/6 switches are switched (lower OR upper, can't be switched at the same time)
     if np.all(ph_en):
         for i in range(3):
@@ -146,7 +148,8 @@ def get_phase_voltages(X, U):
             V_arr[j] = V_arr[3] + emf[j]
             V_arr[k] = V_arr[3] + emf[k]
             return V_arr
-
+    
+    raise ValueError("ERR: None of the switches enabled")
     # elif np.all(ph_en[:2]):
     #     # calculate excited phase voltages
     #     if (U[iv_hu] == 1):
@@ -297,9 +300,6 @@ def get_phase_voltages(X, U):
 #        vu = vui - vm
 #        vv = vvi - vm
 #        vw = vwi - vm
-
-    return V_arr
-
 #
 #
 #
@@ -307,7 +307,6 @@ def get_phase_voltages(X, U):
 def output(X, U):
 
     V = get_phase_voltages(X, U)
-
     Y = [X[sv_iu], X[sv_iv], X[sv_iw],
          V[ph_U], V[ph_V], V[ph_W],
          X[sv_theta], X[sv_omega]]
