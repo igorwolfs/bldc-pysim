@@ -18,9 +18,8 @@
 #
 
 import matplotlib.pyplot as plt
-
+import utils
 import dyn_model  as dm
-import misc_utils as mu
 
 ang_unit_rad_s = 0
 ang_unit_deg_s = 1
@@ -50,7 +49,7 @@ def plot_output(time, Y, ls):
     # Rotor mechanical position
     ax = plt.subplot(4, 1, 3)
     ax.yaxis.set_label_text('Deg', {'color'    : 'k', 'fontsize'   : 15 })
-    plt.plot(time,mu.deg_of_rad(Y[:,dm.ov_theta]), ls, linewidth=1.5)
+    plt.plot(time,utils.ANGLE_DEG2RAD * Y[:,dm.ov_theta], ls, linewidth=1.5)
 #    plt.plot(time, Y[:,dm.ov_theta], ls, linewidth=1.5)
     plt.title('Rotor angular position')
 
@@ -62,10 +61,10 @@ def plot_output(time, Y, ls):
         plt.plot(time,Y[:,dm.ov_omega], ls, linewidth=1.5)
     elif (ang_unit == ang_unit_deg_s):
         ax.yaxis.set_label_text('Deg/s', {'color'    : 'k', 'fontsize'   : 15 })
-        plt.plot(time,mu.degps_of_radps(Y[:,dm.ov_omega]), ls, linewidth=1.5)
+        plt.plot(time, utils.ANGLE_DEG2RAD * Y[:,dm.ov_omega], ls, linewidth=1.5)
     elif (ang_unit == ang_unit_rpm):
         ax.yaxis.set_label_text('RPM', {'color'    : 'k', 'fontsize'   : 15 })
-        plt.plot(time,mu.rpm_of_radps(Y[:,dm.ov_omega]), ls, linewidth=1.5)
+        plt.plot(time,utils.VEL_RADS2RPM*(Y[:,dm.ov_omega]), ls, linewidth=1.5)
 
     plt.title('Rotor Rotational Velocity')
 

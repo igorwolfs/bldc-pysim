@@ -20,55 +20,8 @@
 
 import numpy as np
 import math
-import misc_utils as mu
-
-# parameters
-pset = 2
-
-if pset == 0:
-    Inertia = 0.0022 # aka. 'J' in kg/(m^2)
-    Damping = 0.001  # aka. 'B' in Nm/(rad/s)
-    Kv = 1700.       # aka. motor constant in RPM/V
-    L = 0.00312      # aka. Coil inductance in H
-    M = 0.0          # aka. Mutual inductance in H
-    R = 0.8          # aka. Phase resistence in Ohm
-    VDC = 100.       # aka. Supply voltage
-    NbPoles = 14.    # NbPoles / 2 = Number of pole pairs (you count the permanent magnets on the rotor to get NbPoles)
-    dvf = .7         # aka. freewheeling diode forward voltage
-elif pset == 1:
-    Inertia = 0.0022 # aka. 'J' in kg/(m^2)
-    Damping = 0.001  # aka. 'B' in Nm/(rad/s)
-    Kv = 70.         # aka. motor constant in RPM/V
-    L = 0.00521      # aka. Coil inductance in H
-    M = 0.0          # aka. Mutual inductance in H
-    R = 0.7          # aka. Phase resistence in Ohm
-    VDC = 100.       # aka. Supply voltage
-    NbPoles = 4.    # NbPoles / 2 = Number of pole pairs (you count the permanent magnets on the rotor to get NbPoles)
-    dvf = .7         # aka. freewheeling diode forward voltage
-elif pset == 2: #psim
-    Inertia = 0.000007            # aka. 'J' in kg/(m^2)
-    tau_shaft = 0.006
-    Damping = Inertia/tau_shaft   # aka. 'B' in Nm/(rad/s)
-    Kv = 1./32.3*1000             # aka. motor constant in RPM/V
-    L = 0.00207                   # aka. Coil inductance in H
-    M = -0.00069                  # aka. Mutual inductance in H
-    R = 11.9                      # aka. Phase resistence in Ohm
-    VDC = 100.                    # aka. Supply voltage
-    NbPoles = 4.                  #
-    dvf = .0                      # aka. freewheeling diode forward voltage
-elif pset == 3: #modified psim
-    Inertia = 0.000059            # aka. 'J' in kg/(m^2)
-    tau_shaft = 0.006
-    Damping = Inertia/tau_shaft   # aka. 'B' in Nm/(rad/s)
-    Kv = 1./32.3*1000             # aka. motor constant in RPM/V
-    L = 0.00207                   # aka. Coil inductance in H
-    M = -0.00069                  # aka. Mutual inductance in H
-    R = 11.9                      # aka. Phase resistence in Ohm
-    VDC = 300.                    # aka. Supply voltage
-    NbPoles = 4.                  #
-    dvf = .0                      # aka. freewheeling diode forward voltage
-else:
-    print("Unknown pset %d", pset)
+import utils
+import config
 
 # Components of the state vector
 sv_theta  = 0      # angle of the rotor
@@ -86,12 +39,9 @@ iv_lv   = 2
 iv_hv   = 3
 iv_lw   = 4
 iv_hw   = 5
-iv_size = 6
-
 
 # Components of the perturbation vector
 pv_torque  = 0
-pv_friction = 1
 pv_size = 2
 
 # Components of the output vector
@@ -120,182 +70,188 @@ dv_ph_U = 3
 dv_ph_V = 4
 dv_ph_W = 5
 dv_ph_star = 6
-dv_size = 7
 
 #
 # Calculate backemf at a given omega offset from the current rotor position
 #
 # Used to calculate the phase backemf aka. 'e'
 #
-def backemf(X,thetae_offset):
-    phase_thetae = mu.norm_angle((X[sv_theta] * (NbPoles / 2.)) + thetae_offset)
 
-    bemf_constant = mu.vpradps_of_rpmpv(Kv) # aka. ke in V/rad/s
-    max_bemf = bemf_constant * X[sv_omega]
-
-    bemf = 0.
-    if 0. <= phase_thetae <= (math.pi * (1./6.)):
-        bemf = (max_bemf / (math.pi * (1./6.))) * phase_thetae
-    elif (math.pi/6.) < phase_thetae <= (math.pi * (5./6.)):
-        bemf = max_bemf
-    elif (math.pi * (5./6.)) < phase_thetae <= (math.pi * (7./6.)):
-        bemf = -((max_bemf/(math.pi/6.))* (phase_thetae - math.pi))
-    elif (math.pi * (7./6.)) < phase_thetae <= (math.pi * (11./6.)):
-        bemf = -max_bemf
-    elif (math.pi * (11./6.)) < phase_thetae <= (2.0 * math.pi):
-        bemf = (max_bemf/(math.pi/6.)) * (phase_thetae - (2. * math.pi))
-    else:
-        print("ERROR: angle out of bounds can not calculate bemf %d", phase_thetae)
-
-    return bemf
-
-#
 # Calculate phase voltages
 # Returns a vector of phase voltages in reference to the star point
-def voltages(X, U):
+def get_phase_voltages(X, U):
+    emf = np.zeros(3, dtype=float)
+    max_bemf = (utils.VEL_RADS2RPM * X[sv_omega]) / config.Kv
+    for phase in range(3):
+        angle = utils.angle_2pi((X[sv_theta] * (config.NbPoles / 2.)) + phase*2*math.pi/3)
+        emf[phase] = max_bemf * utils.trapezoid(angle)
 
-    eu = backemf(X, 0.)
-    ev = backemf(X, math.pi * (2./3.))
-    ew = backemf(X, math.pi * (4./3.))
 
-    # Check which phases are excited
-    pux = (U[iv_hu] == 1) or \
-        (U[iv_lu] == 1)
+    ### Check which phases are excited
+    ph_en = np.array([(U[iv_hu] == 1) or (U[iv_lu] == 1),
+                        (U[iv_hv] == 1) or (U[iv_lv] == 1), 
+                        (U[iv_hw] == 1) or (U[iv_lw] == 1)])
 
-    pvx = (U[iv_hv] == 1) or \
-        (U[iv_lv] == 1)
+    # u, v, w, m
+    V_arr = np.zeros(4)
 
-    pwx = (U[iv_hw] == 1) or \
-        (U[iv_lw] == 1)
+    # Case where 3/6 switches are switched (lower OR upper, can't be switched at the same time)
+    if np.all(ph_en):
+        for i in range(3):
+            if (U[i*2+1] == 1):
+                V_arr[i] = config.VDC/2.
+            else:
+                V_arr[i] = -config.VDC/2.
 
-    vu = 0.
-    vv = 0.
-    vw = 0.
-    vm = 0.
+        #? What happens to the voltage drops over the resistor and inductor
+        V_arr[3] = (np.sum(V_arr[:3]) - np.sum(emf)) / 3.
+        return V_arr
 
-    if pux and pvx and pwx:
-        if (U[iv_hu] == 1):
-            vu = VDC/2.
-        else:
-            vu = -VDC/2.
 
-        if (U[iv_hv] == 1):
-            vv = VDC/2.
-        else:
-            vv = -VDC/2.
+    # Case where 2/6 switches are switched
+    for i in range(3):
+        j, k = (i+1)%3, (i+2)%3
+        # The 2 enabled phases are equal to -V_DC or +V_DC depending on the upper / lower switch setting
+        if ph_en[j] and ph_en[k]:
+            for i_set in [j, k]:
+                if (U[i_set*2+1] == 1):
+                    V_arr[i_set] = config.VDC/2
+                else:
+                    V_arr[i_set] = -config.VDC/2
 
-        if (U[iv_hw] == 1):
-            vw = VDC/2.
-        else:
-            vw = -VDC/2.
+            # The star voltage is the (2 array voltages - the 2 remaining emfs) / 2
+            V_arr[3] = (V_arr[j] + V_arr[k] - emf[j] - emf[k]) / 2
+            # The remaining phase voltage is the star voltage + the EMF
+            V_arr[i] = emf[i] + V_arr[3]
 
-        vm = (vu + vv + vw - eu - ev - ew) / 3.
+            '''
+            Depending on the state of this 3rd voltage
+            -  > config.VDC + VDIODE: upper switch freewheeling diode will conduct
+            - < -VDIODE: lower switch freewheeling diode will conduct
+            '''
 
-    elif pux and pvx:
+            return V_arr
 
-        # calculate excited phase voltages
-        if (U[iv_hu] == 1):
-            vu = VDC/2.
-        else:
-            vu = -VDC/2.
+    # Case where 1/6 switch is switched
+    for i in range(3):
+        if ph_en[i]:
+            if (U[i*2+1] == 1):
+                V_arr[i] = config.VDC/2
+            else:
+                V_arr[i] = -config.VDC/2
 
-        if (U[iv_hv] == 1):
-            vv = VDC/2.
-        else:
-            vv = -VDC/2.
+            V_arr[3] = V_arr[i] - emf[i]
 
-        # calculate star voltage
-        vm = (vu + vv - eu - ev) / 2.
+            j, k = (i+1)%3, (i+2)%3
+            V_arr[j] = V_arr[3] + emf[j]
+            V_arr[k] = V_arr[3] + emf[k]
+            return V_arr
 
-        # calculate remaining phase voltage
-        vw = ew + vm
+    # elif np.all(ph_en[:2]):
+    #     # calculate excited phase voltages
+    #     if (U[iv_hu] == 1):
+    #         vu = config.VDC/2.
+    #     else:
+    #         vu = -config.VDC/2.
 
-        # clip the voltage to freewheeling diodes
-        #if (vw > ((VDC/2) + dvf)):
-        #    vw = (VDC/2) + dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-        #elif (vw < (-(VDC/2) - dvf)):
-        #    vw = -(VDC/2) - dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
+    #     if (U[iv_hv] == 1):
+    #         vv = config.VDC/2.
+    #     else:
+    #         vv = -config.VDC/2.
 
-    elif pux and pwx:
-        if (U[iv_hu] == 1):
-            vu = VDC/2.
-        else:
-            vu = -VDC/2.
+    #     # calculate star voltage
+    #     vm = (vu + vv - eu - ev) / 2.
 
-        if (U[iv_hw] == 1):
-            vw = VDC/2.
-        else:
-            vw = -VDC/2.
-
-        vm = (vu + vw - eu - ew) / 2.
-        vv = ev + vm
-
-        # clip the voltage to freewheeling diodes
-        #if (vv > ((VDC/2) + dvf)):
-        #    vv = (VDC/2) + dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-        #elif (vv < (-(VDC/2) - dvf)):
-        #    vv = -(VDC/2) - dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-
-    elif pvx and pwx:
-        if (U[iv_hv] == 1):
-            vv = VDC/2.
-        else:
-            vv = -VDC/2.
-
-        if (U[iv_hw] == 1):
-            vw = VDC/2.
-        else:
-            vw = -VDC/2.
-
-        vm = (vv + vw - ev - ew) / 2.
-        vu = eu + vm
+    #     # calculate remaining phase voltage
+    #     vw = ew + vm
 
         # clip the voltage to freewheeling diodes
-        #if (vu > ((VDC/2) + dvf)):
-        #    vu = (VDC/2) + dvf;
+        #if (vw > ((config.VDC/2) + dvf)):
+        #    vw = (config.VDC/2) + dvf;
         #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-        #elif (vu < (-(VDC/2) - dvf)):
-        #    vu = -(VDC/2) - dvf;
+        #elif (vw < (-(config.VDC/2) - dvf)):
+        #    vw = -(config.VDC/2) - dvf;
         #    vm = (vu + vv + vw - eu - ev - ew) / 3.
 
-    elif pux:
-        if (U[iv_hu] == 1):
-            vu = VDC/2
-        else:
-            vu = -VDC/2.
+    # elif ph_en[0] and ph_en[2]:
+    #     if (U[iv_hu] == 1):
+    #         vu = config.VDC/2.
+    #     else:
+    #         vu = -config.VDC/2.
 
-        vm = (vu - eu)
-        vv = ev + vm
-        vw = ew + vm
+    #     if (U[iv_hw] == 1):
+    #         vw = config.VDC/2.
+    #     else:
+    #         vw = -config.VDC/2.
 
-	# if we want to handle diodes properly how to do that here?
+    #     vm = (vu + vw - eu - ew) / 2.
+    #     vv = ev + vm
 
-    elif pvx:
-        if (U[iv_hv] == 1):
-            vv = VDC/2
-        else:
-            vv = -VDC/2.
+        # clip the voltage to freewheeling diodes
+        #if (vv > ((config.VDC/2) + dvf)):
+        #    vv = (config.VDC/2) + dvf;
+        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
+        #elif (vv < (-(config.VDC/2) - dvf)):
+        #    vv = -(config.VDC/2) - dvf;
+        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
 
-        vm = (vv - ev)
-        vu = eu + vm
-        vw = ew + vm
-    elif pwx:
-        if (U[iv_hw] == 1):
-            vw = VDC/2
-        else:
-            vw = -VDC/2.
+    # elif np.all(ph_en[1:]):
+    #     if (U[iv_hv] == 1):
+    #         vv = config.VDC/2.
+    #     else:
+    #         vv = -config.VDC/2.
 
-        vm = (vw - ew)
-        vu = eu + vm
-        vv = ev + vm
-    else:
-        vm = eu
-        vv = ev
-        vw = ew
+    #     if (U[iv_hw] == 1):
+    #         vw = config.VDC/2.
+    #     else:
+    #         vw = -config.VDC/2.
+
+    #     vm = (vv + vw - ev - ew) / 2.
+    #     vu = eu + vm
+
+        # clip the voltage to freewheeling diodes
+        #if (vu > ((config.VDC/2) + dvf)):
+        #    vu = (config.VDC/2) + dvf;
+        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
+        #elif (vu < (-(config.VDC/2) - dvf)):
+        #    vu = -(config.VDC/2) - dvf;
+        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
+
+    # elif ph_en[0]:
+    #     if (U[iv_hu] == 1):
+    #         vu = config.VDC/2
+    #     else:
+    #         vu = -config.VDC/2.
+
+    #     vm = (vu - eu)
+    #     vv = ev + vm
+    #     vw = ew + vm
+
+	# # if we want to handle diodes properly how to do that here?
+
+    # elif ph_en[1]:
+    #     if (U[iv_hv] == 1):
+    #         vv = config.VDC/2
+    #     else:
+    #         vv = -config.VDC/2.
+
+    #     vm = (vv - ev)
+    #     vu = eu + vm
+    #     vw = ew + vm
+
+    # elif ph_en[2]:
+    #     if (U[iv_hw] == 1):
+    #         vw = config.VDC/2
+    #     else:
+    #         vw = -config.VDC/2.
+
+    #     vm = (vw - ew)
+    #     vu = eu + vm
+    #     vv = ev + vm
+    # else:
+    #     vm = eu
+    #     vv = ev
+    #     vw = ew
 
 
 #    # Initialize the imposed terminal voltages
@@ -305,17 +261,17 @@ def voltages(X, U):
 #
 #    # Phase input voltages based on the inverter switches states
 #    if (U[iv_hu] == 1) or (U[iv_dhu] == 1):
-#        vui = VDC/2.
+#        vui = config.VDC/2.
 #    if (U[iv_lu] == 1) or (U[iv_dlu] == 1):
-#        vui = -VDC/2.
+#        vui = -config.VDC/2.
 #    if (U[iv_hv] == 1) or (U[iv_dhv] == 1):
-#        vvi = VDC/2.
+#        vvi = config.VDC/2.
 #    if (U[iv_lv] == 1) or (U[iv_dlv] == 1):
-#        vvi = -VDC/2.
+#        vvi = -config.VDC/2.
 #    if (U[iv_hw] == 1) or (U[iv_dhw] == 1):
-#        vwi = VDC/2.
+#        vwi = config.VDC/2.
 #    if (U[iv_lw] == 1) or (U[iv_dlw] == 1):
-#        vwi = -VDC/2.
+#        vwi = -config.VDC/2.
 #
 #    #i_thr = 0.001 # current threshold saying that the phase is not conducting
 #    i_thr = 0. # current threshold saying that the phase is not conducting
@@ -342,71 +298,86 @@ def voltages(X, U):
 #        vv = vvi - vm
 #        vw = vwi - vm
 
+    return V_arr
 
-#    print "{} : {} {} {}".format(X[sv_omega], vu, vv, vw )
+#
+#
+#
 
-    V = [ vu,
-          vv,
-          vw,
-          vm
-          ]
+def output(X, U):
 
-    return V
+    V = get_phase_voltages(X, U)
+
+    Y = [X[sv_iu], X[sv_iv], X[sv_iw],
+         V[ph_U], V[ph_V], V[ph_W],
+         X[sv_theta], X[sv_omega]]
+
+    return Y
 
 #
 # Dynamic model
 #
 # X state, t time, U input, W perturbation
 #
-def dyn(X, t, U, W):
-    Xd, Xdebug = dyn_debug(X, t, U, W)
-
+def dyn(X, t, U):
+    Xd, Xdebug = dyn_debug(X, t, U)
     return Xd
 
+
+def backemf(X, phase):
+    angle = utils.angle_2pi((X[sv_theta] * (config.NbPoles / 2.)) + phase*2*math.pi/3)
+    max_bemf = (utils.VEL_RADS2RPM * X[sv_omega]) / config.Kv
+    return max_bemf * utils.trapezoid(angle)
+
+
 # Dynamic model with debug vector
-def dyn_debug(X, t, U, W):
+def dyn_debug(X, t, U):
+    emf = np.zeros(3, dtype=float)
+    max_bemf = (utils.VEL_RADS2RPM * X[sv_omega]) / config.Kv
 
-    eu = backemf(X, 0.)
-    ev = backemf(X, math.pi * (2./3.))
-    ew = backemf(X, math.pi * (4./3.))
+    for phase in range(3):
+        angle = utils.angle_2pi((X[sv_theta] * (config.NbPoles / 2.)) + phase*2*math.pi/3)
+        emf[phase] = max_bemf * utils.trapezoid(angle)
 
-    # Electromagnetic torque
-    etorque = (eu * X[sv_iu] + ev * X[sv_iv] + ew * X[sv_iw])/X[sv_omega]
+    
+    # Energy equation: torque =  (EM-energy) / omega
+    etorque = np.dot(emf, X[2:5]) / X[sv_omega]
 
-    # Mechanical torque
-    mtorque = ((etorque * (NbPoles / 2)) - (Damping * X[sv_omega]) - W[pv_torque])
+    # Mechanical torque (subtracting config.B and load torque)
+    mtorque = ((etorque * (config.NbPoles / 2)) - (config.B * X[sv_omega]) - config.T_load)
 
-    if ((mtorque > 0) and (mtorque <= W[pv_friction])):
+    # Include static friction
+    if ((mtorque > 0) and (mtorque <= config.T_fstatic)):
         mtorque = 0
-    elif (mtorque >= W[pv_friction]):
-        mtorque = mtorque - W[pv_friction]
-    elif ((mtorque < 0) and (mtorque >= (-W[pv_friction]))):
+    elif (mtorque >= config.T_fstatic):
+        mtorque = mtorque - config.T_fstatic
+    elif ((mtorque < 0) and (mtorque >= (-config.T_fstatic))):
 	    mtorque = 0
-    elif (mtorque <= (-W[pv_friction])):
-        mtorque = mtorque + W[pv_friction]
+    elif (mtorque <= (-config.T_fstatic)):
+        mtorque = mtorque + config.T_fstatic
 
     # Acceleration of the rotor
-    omega_dot = mtorque / Inertia
+    omega_dot = mtorque / config.Inertia
 
-    V = voltages(X, U)
+    V = get_phase_voltages(X, U)
 
-    pdt = VDC/2 + dvf
+    pdt = config.VDC/2 + config.dvf
 
-    iu_dot = (V[ph_U] - (R * X[sv_iu]) - eu - V[ph_star]) / (L - M)
-    iv_dot = (V[ph_V] - (R * X[sv_iv]) - ev - V[ph_star]) / (L - M)
-    iw_dot = (V[ph_W] - (R * X[sv_iw]) - ew - V[ph_star]) / (L - M)
+    iu_dot = (V[ph_U] - (config.R * X[sv_iu]) - emf[0] - V[ph_star]) / (config.L - config.M)
+    iv_dot = (V[ph_V] - (config.R * X[sv_iv]) - emf[1] - V[ph_star]) / (config.L - config.M)
+    iw_dot = (V[ph_W] - (config.R * X[sv_iw]) - emf[2] - V[ph_star]) / (config.L - config.M)
 
-    Xd = [  X[sv_omega],
-            omega_dot,
-            iu_dot,
-            iv_dot,
-            iw_dot
-        ]
+    Xd = [X[sv_omega],
+          omega_dot,
+          (V[ph_U] - (config.R * X[sv_iu]) - emf[0] - V[ph_star]) / (config.L - config.M),
+          (V[ph_V] - (config.R * X[sv_iv]) - emf[1] - V[ph_star]) / (config.L - config.M),
+          (V[ph_W] - (config.R * X[sv_iw]) - emf[2] - V[ph_star]) / (config.L - config.M)
+    ]
 
     Xdebug = [
-        eu,
-        ev,
-        ew,
+        emf[0],
+        emf[1],
+        emf[2],
         V[ph_U],
         V[ph_V],
         V[ph_W],
@@ -414,17 +385,3 @@ def dyn_debug(X, t, U, W):
         ]
 
     return Xd, Xdebug
-
-
-#
-#
-#
-def output(X, U):
-
-    V = voltages(X, U)
-
-    Y = [X[sv_iu], X[sv_iv], X[sv_iw],
-         V[ph_U], V[ph_V], V[ph_W],
-         X[sv_theta], X[sv_omega]]
-
-    return Y

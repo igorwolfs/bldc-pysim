@@ -21,9 +21,10 @@ import numpy as np
 
 import dyn_model  as dm
 
-import misc_utils as mu
+import utils
 
 import math
+import config
 
 PWM_freq = 16000
 PWM_cycle_time = (1./16000)
@@ -37,9 +38,9 @@ debug = False
 # Sp setpoint, Y output
 #
 def run_hpwm_l_on_bipol(Sp, Y, t):
-    elec_angle = mu.norm_angle(Y[dm.ov_theta] * dm.NbPoles/2)
+    elec_angle = utils.angle_2pi(Y[dm.ov_theta] * config.NbPoles/2)
 
-    U = np.zeros(dm.iv_size)
+    U = np.zeros(config.N_SWITCHES)
 
     step = "none"
 
@@ -157,7 +158,7 @@ def run_hpwm_l_on_bipol(Sp, Y, t):
     U[dm.iv_lw] = lv
 
     if debug:
-        print(f'time {t} step {step} eangle {mu.deg_of_rad(elec_angle)} switches {U}')
+        print(f'time {t} step {step} eangle {utils.ANGLE_DEG2RAD * elec_angle} switches {U}')
 
     return U
 
@@ -166,9 +167,9 @@ def run_hpwm_l_on_bipol(Sp, Y, t):
 # Sp setpoint, Y output
 #
 def run_hpwm_l_on(Sp, Y, t):
-    elec_angle = mu.norm_angle(Y[dm.ov_theta] * dm.NbPoles/2)
+    elec_angle = utils.angle_2pi(Y[dm.ov_theta] * config.NbPoles/2)
 
-    U = np.zeros(dm.iv_size)
+    U = np.zeros(config.N_SWITCHES)
 
     step = "none"
 
@@ -307,7 +308,7 @@ def run_hpwm_l_on(Sp, Y, t):
     U[dm.iv_lw] = lv
 
     if debug:
-        print(f'time {t} step {step} eangle {mu.deg_of_rad(elec_angle)} switches {U}')
+        print(f'time {t} step {step} eangle {utils.ANGLE_DEG2RAD * elec_angle} switches {U}')
 
     return U
 
