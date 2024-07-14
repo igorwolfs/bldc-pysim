@@ -53,4 +53,4 @@ def trapezoid(angle):
     elif (math.pi * (11 / 6)) < angle <= (2 * math.pi):
         return (1 / (math.pi / 6)) * (angle - (2 * math.pi))
     else:
-        raise ValueError("ERROR: angle out of bounds can not calculate bemf %d", phase_thetae)
+        raise ValueError("ERROR: angle out of bounds can not calculate bemf %d", angle)

@@ -32,14 +32,13 @@ import config
 
 
 def display_state_and_command(time, X, U):
-
     titles_state = ['$\\theta$', '$\omega$', '$i_u$', '$i_v$', '$i_w$']
     titles_cmd = ['$u_l$', '$u_h$', '$v_l$', '$v_h$', '$w_l$', '$w_h$']
     for i in range(0, 2):
         plt.subplot(6, 2, 2*i+1)
         plt.plot(time, utils.ANGLE_DEG2RAD * X[:,i], 'r', linewidth=3.0)
         plt.title(titles_state[i])
-    for i in range(2, dm.sv_size):
+    for i in range(2, config.N_STATE_VARS):
         plt.subplot(6, 2, 2*i+1)
         plt.plot(time, X[:,i], 'r', linewidth=3.0)
         plt.title(titles_state[i])
@@ -98,7 +97,7 @@ def main():
         U[i-1,:] = ctl.run(0, Y[i-1,:], time[i-1])            # run the controller for the last step
         
         '''
-        INPUT
+        INPUT:
         - dyn: function computing the derviative of y at t.
         - y: initial condition on y to integrate (vector)
         - t: sequence of time points to be solved (should be monotonically increasing or decreasing)
@@ -114,7 +113,6 @@ def main():
 
     Y[-1,:] = Y[-2,:]
     U[-1,:] = U[-2,:]
-
 
     compress_factor = 3
     if compress_factor > 1:

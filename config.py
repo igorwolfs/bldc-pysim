@@ -11,7 +11,7 @@ N_SWITCHES = 6 # Upper / lower switches x 3
 SIM_STEP = 1e-6
 SIM_TIME = 1e-2 # 10 ms
 ### STATE VARS
-# angle, speed, iu, iv, iw
+# iu, iv, iw, angle, speed
 X0 = [0, 1e-4, 0, 0, 0] # INITIAL CONDITION
 
 #################
@@ -30,3 +30,10 @@ NbPoles = 4.                  #
 dvf = .0                      # aka. freewheeling diode forward voltage
 T_fstatic = 1 # Static friction in Nm
 T_load = 0   # Load torque (Write a fr)
+
+
+#####################
+## INVERTER PARAMS ##
+#####################
+
+V_DF = 1.3 # IRFZ44N: Diode forward voltage

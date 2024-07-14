@@ -29,8 +29,6 @@ sv_omega = 1       # angular speed of the rotor
 sv_iu = 2          # phase u current
 sv_iv = 3          # phase v current
 sv_iw = 4          # phase w current
-sv_size = 5
-
 
 # Components of the command vector
 iv_lu   = 0
@@ -88,17 +86,17 @@ def get_phase_voltages(X, U):
 
 
     ### Check which phases are excited
-    ph_en = np.array([(U[iv_hu] == 1) or (U[iv_lu] == 1),
+    ph_en_arr = np.array([(U[iv_hu] == 1) or (U[iv_lu] == 1),
                         (U[iv_hv] == 1) or (U[iv_lv] == 1), 
                         (U[iv_hw] == 1) or (U[iv_lw] == 1)])
 
-    # u, v, w, m
+    ### Diodes: u, v, w, m
     V_arr = np.zeros(4)
-    if (not np.any(ph_en)):
+    if (not np.any(ph_en_arr)):
         return V_arr # Voltage is zero when nothing is yet enabled
     
     # Case where 3/6 switches are switched (lower OR upper, can't be switched at the same time)
-    if np.all(ph_en):
+    if np.all(ph_en_arr):
         for i in range(3):
             if (U[i*2+1] == 1):
                 V_arr[i] = config.VDC/2.
@@ -109,12 +107,11 @@ def get_phase_voltages(X, U):
         V_arr[3] = (np.sum(V_arr[:3]) - np.sum(emf)) / 3.
         return V_arr
 
-
     # Case where 2/6 switches are switched
     for i in range(3):
         j, k = (i+1)%3, (i+2)%3
         # The 2 enabled phases are equal to -V_DC or +V_DC depending on the upper / lower switch setting
-        if ph_en[j] and ph_en[k]:
+        if ph_en_arr[j] and ph_en_arr[k]:
             for i_set in [j, k]:
                 if (U[i_set*2+1] == 1):
                     V_arr[i_set] = config.VDC/2
@@ -128,15 +125,15 @@ def get_phase_voltages(X, U):
 
             '''
             Depending on the state of this 3rd voltage
-            -  > config.VDC + VDIODE: upper switch freewheeling diode will conduct
-            - < -VDIODE: lower switch freewheeling diode will conduct
+            * > config.VDC + VDIODE: upper switch freewheeling diode will conduct
+            * < -VDIODE: lower switch freewheeling diode will conduct
             '''
 
             return V_arr
 
     # Case where 1/6 switch is switched
     for i in range(3):
-        if ph_en[i]:
+        if ph_en_arr[i]:
             if (U[i*2+1] == 1):
                 V_arr[i] = config.VDC/2
             else:
@@ -150,7 +147,7 @@ def get_phase_voltages(X, U):
             return V_arr
     
     raise ValueError("ERR: None of the switches enabled")
-    # elif np.all(ph_en[:2]):
+    # elif np.all(ph_en_arr[:2]):
     #     # calculate excited phase voltages
     #     if (U[iv_hu] == 1):
     #         vu = config.VDC/2.
@@ -176,7 +173,7 @@ def get_phase_voltages(X, U):
         #    vw = -(config.VDC/2) - dvf;
         #    vm = (vu + vv + vw - eu - ev - ew) / 3.
 
-    # elif ph_en[0] and ph_en[2]:
+    # elif ph_en_arr[0] and ph_en_arr[2]:
     #     if (U[iv_hu] == 1):
     #         vu = config.VDC/2.
     #     else:
@@ -198,7 +195,7 @@ def get_phase_voltages(X, U):
         #    vv = -(config.VDC/2) - dvf;
         #    vm = (vu + vv + vw - eu - ev - ew) / 3.
 
-    # elif np.all(ph_en[1:]):
+    # elif np.all(ph_en_arr[1:]):
     #     if (U[iv_hv] == 1):
     #         vv = config.VDC/2.
     #     else:
@@ -220,7 +217,7 @@ def get_phase_voltages(X, U):
         #    vu = -(config.VDC/2) - dvf;
         #    vm = (vu + vv + vw - eu - ev - ew) / 3.
 
-    # elif ph_en[0]:
+    # elif ph_en_arr[0]:
     #     if (U[iv_hu] == 1):
     #         vu = config.VDC/2
     #     else:
@@ -232,7 +229,7 @@ def get_phase_voltages(X, U):
 
 	# # if we want to handle diodes properly how to do that here?
 
-    # elif ph_en[1]:
+    # elif ph_en_arr[1]:
     #     if (U[iv_hv] == 1):
     #         vv = config.VDC/2
     #     else:
@@ -242,7 +239,7 @@ def get_phase_voltages(X, U):
     #     vu = eu + vm
     #     vw = ew + vm
 
-    # elif ph_en[2]:
+    # elif ph_en_arr[2]:
     #     if (U[iv_hw] == 1):
     #         vw = config.VDC/2
     #     else:
@@ -301,8 +298,6 @@ def get_phase_voltages(X, U):
 #        vv = vvi - vm
 #        vw = vwi - vm
 #
-#
-#
 
 def output(X, U):
 
@@ -323,12 +318,6 @@ def dyn(X, t, U):
     return Xd
 
 
-def backemf(X, phase):
-    angle = utils.angle_2pi((X[sv_theta] * (config.NbPoles / 2.)) + phase*2*math.pi/3)
-    max_bemf = (utils.VEL_RADS2RPM * X[sv_omega]) / config.Kv
-    return max_bemf * utils.trapezoid(angle)
-
-
 # Dynamic model with debug vector
 def dyn_debug(X, t, U):
     emf = np.zeros(3, dtype=float)
@@ -340,7 +329,7 @@ def dyn_debug(X, t, U):
 
     
     # Energy equation: torque =  (EM-energy) / omega
-    etorque = np.dot(emf, X[2:5]) / X[sv_omega]
+    etorque = np.dot(emf, X[sv_iu:sv_iw+1]) / X[sv_omega]
 
     # Mechanical torque (subtracting config.B and load torque)
     mtorque = ((etorque * (config.NbPoles / 2)) - (config.B * X[sv_omega]) - config.T_load)
