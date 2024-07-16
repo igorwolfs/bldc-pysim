@@ -85,17 +85,20 @@ def main():
     X[0,:] = config.X0
 
     for i in range(1,time.size):
+        # The switch should be a part of the whole equation and integration because you need the EMF for control and you could
+        # just integrate the whole timeseries in that case.
+        #? Why take the state of the switches at time t=i-2?
         if i==1:
             Uim2 = np.zeros(config.N_SWITCHES)
         else:
             Uim2 = U[i-2,:]
 
-        # Get phase voltages, angle and rot-speed at t=i-1
-        Y[i-1,:] = dm.output(X[i-1,:], Uim2)                  # get the output for the last step
+        # Get phase voltages, angle and rot-speed at t=i-1 (used to set the switches accordingly)
+        Y[i-1,:] = dm.output(X[i-1,:], Uim2)
         
         # 
-        U[i-1,:] = ctl.run(0, Y[i-1,:], time[i-1])            # run the controller for the last step
-        
+        U[i-1,:] = ctl.run(Y[i-1,:], time[i-1])            # run the controller for the last step
+
         '''
         INPUT:
         - dyn: function computing the derviative of y at t.

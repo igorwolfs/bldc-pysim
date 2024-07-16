@@ -81,8 +81,22 @@ def get_phase_voltages(X, U):
     emf = np.zeros(3, dtype=float)
     max_bemf = (utils.VEL_RADS2RPM * X[sv_omega]) / config.Kv
     for phase in range(3):
+        # Mechanical -> Electrical angle (x poles / 2)
         angle = utils.angle_2pi((X[sv_theta] * (config.NbPoles / 2.)) + phase*2*math.pi/3)
         emf[phase] = max_bemf * utils.trapezoid(angle)
+
+    X_currents = np.array([X[sv_iu], X[sv_iv], X[sv_iw]])
+
+    ### Check which diodes are enabled
+    #? How do we determine the neutral voltage when it is only calculable after knowing which switches are open or closed?
+    #? Perhaps we can take the previous value of the voltage vm and assume it doesn't change that quickly?
+    # D_arr = np.zeros(6)
+    # for phase in range(3):
+    #     if not (U[i*2+1] or U[i*2]):
+    #         if (X[sv_iu+i] < 0) or (emf[i]+vm > config.VDC+config.V_DF):
+    #             D_arr[i*2+1] = 1
+    #         elif (X[sv_iu+i] < 0) or (emf[i]+vm+config.V_DF < 0):
+    #             D_arr[i*2] = 1
 
 
     ### Check which phases are excited
@@ -99,9 +113,9 @@ def get_phase_voltages(X, U):
     if np.all(ph_en_arr):
         for i in range(3):
             if (U[i*2+1] == 1):
-                V_arr[i] = config.VDC/2.
+                V_arr[i] = config.VDC
             else:
-                V_arr[i] = -config.VDC/2.
+                V_arr[i] = 0.
 
         #? What happens to the voltage drops over the resistor and inductor
         V_arr[3] = (np.sum(V_arr[:3]) - np.sum(emf)) / 3.
@@ -114,15 +128,18 @@ def get_phase_voltages(X, U):
         if ph_en_arr[j] and ph_en_arr[k]:
             for i_set in [j, k]:
                 if (U[i_set*2+1] == 1):
-                    V_arr[i_set] = config.VDC/2
+                    V_arr[i_set] = config.VDC
                 else:
-                    V_arr[i_set] = -config.VDC/2
+                    V_arr[i_set] = 0.
 
             # The star voltage is the (2 array voltages - the 2 remaining emfs) / 2
             V_arr[3] = (V_arr[j] + V_arr[k] - emf[j] - emf[k]) / 2
             # The remaining phase voltage is the star voltage + the EMF
             V_arr[i] = emf[i] + V_arr[3]
-
+            # if (X_currents[i] != 0):
+                # raise ValueError("Current i is nonzero")
+            # if np.any(V_arr[i] > config.VDC) or np.any(V_arr[i] < 0):
+            #     raise ValueError("Freewheeling diodes conducting")
             '''
             Depending on the state of this 3rd voltage
             * > config.VDC + VDIODE: upper switch freewheeling diode will conduct
@@ -135,169 +152,23 @@ def get_phase_voltages(X, U):
     for i in range(3):
         if ph_en_arr[i]:
             if (U[i*2+1] == 1):
-                V_arr[i] = config.VDC/2
+                V_arr[i] = config.VDC
             else:
-                V_arr[i] = -config.VDC/2
-
+                V_arr[i] = 0.
             V_arr[3] = V_arr[i] - emf[i]
-
             j, k = (i+1)%3, (i+2)%3
             V_arr[j] = V_arr[3] + emf[j]
             V_arr[k] = V_arr[3] + emf[k]
+            
+            # if (X_currents[j] != 0 or X_currents[k] != 0):
+                # raise ValueError("Current i is nonzero")
+            
+            # if np.any(V_arr[i] > config.VDC) or np.any(V_arr[i] < 0):
+            #     raise ValueError("Freewheeling diodes conducting")
             return V_arr
     
     raise ValueError("ERR: None of the switches enabled")
-    # elif np.all(ph_en_arr[:2]):
-    #     # calculate excited phase voltages
-    #     if (U[iv_hu] == 1):
-    #         vu = config.VDC/2.
-    #     else:
-    #         vu = -config.VDC/2.
 
-    #     if (U[iv_hv] == 1):
-    #         vv = config.VDC/2.
-    #     else:
-    #         vv = -config.VDC/2.
-
-    #     # calculate star voltage
-    #     vm = (vu + vv - eu - ev) / 2.
-
-    #     # calculate remaining phase voltage
-    #     vw = ew + vm
-
-        # clip the voltage to freewheeling diodes
-        #if (vw > ((config.VDC/2) + dvf)):
-        #    vw = (config.VDC/2) + dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-        #elif (vw < (-(config.VDC/2) - dvf)):
-        #    vw = -(config.VDC/2) - dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-
-    # elif ph_en_arr[0] and ph_en_arr[2]:
-    #     if (U[iv_hu] == 1):
-    #         vu = config.VDC/2.
-    #     else:
-    #         vu = -config.VDC/2.
-
-    #     if (U[iv_hw] == 1):
-    #         vw = config.VDC/2.
-    #     else:
-    #         vw = -config.VDC/2.
-
-    #     vm = (vu + vw - eu - ew) / 2.
-    #     vv = ev + vm
-
-        # clip the voltage to freewheeling diodes
-        #if (vv > ((config.VDC/2) + dvf)):
-        #    vv = (config.VDC/2) + dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-        #elif (vv < (-(config.VDC/2) - dvf)):
-        #    vv = -(config.VDC/2) - dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-
-    # elif np.all(ph_en_arr[1:]):
-    #     if (U[iv_hv] == 1):
-    #         vv = config.VDC/2.
-    #     else:
-    #         vv = -config.VDC/2.
-
-    #     if (U[iv_hw] == 1):
-    #         vw = config.VDC/2.
-    #     else:
-    #         vw = -config.VDC/2.
-
-    #     vm = (vv + vw - ev - ew) / 2.
-    #     vu = eu + vm
-
-        # clip the voltage to freewheeling diodes
-        #if (vu > ((config.VDC/2) + dvf)):
-        #    vu = (config.VDC/2) + dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-        #elif (vu < (-(config.VDC/2) - dvf)):
-        #    vu = -(config.VDC/2) - dvf;
-        #    vm = (vu + vv + vw - eu - ev - ew) / 3.
-
-    # elif ph_en_arr[0]:
-    #     if (U[iv_hu] == 1):
-    #         vu = config.VDC/2
-    #     else:
-    #         vu = -config.VDC/2.
-
-    #     vm = (vu - eu)
-    #     vv = ev + vm
-    #     vw = ew + vm
-
-	# # if we want to handle diodes properly how to do that here?
-
-    # elif ph_en_arr[1]:
-    #     if (U[iv_hv] == 1):
-    #         vv = config.VDC/2
-    #     else:
-    #         vv = -config.VDC/2.
-
-    #     vm = (vv - ev)
-    #     vu = eu + vm
-    #     vw = ew + vm
-
-    # elif ph_en_arr[2]:
-    #     if (U[iv_hw] == 1):
-    #         vw = config.VDC/2
-    #     else:
-    #         vw = -config.VDC/2.
-
-    #     vm = (vw - ew)
-    #     vu = eu + vm
-    #     vv = ev + vm
-    # else:
-    #     vm = eu
-    #     vv = ev
-    #     vw = ew
-
-
-#    # Initialize the imposed terminal voltages
-#    vui = 0.
-#    vvi = 0.
-#    vwi = 0.
-#
-#    # Phase input voltages based on the inverter switches states
-#    if (U[iv_hu] == 1) or (U[iv_dhu] == 1):
-#        vui = config.VDC/2.
-#    if (U[iv_lu] == 1) or (U[iv_dlu] == 1):
-#        vui = -config.VDC/2.
-#    if (U[iv_hv] == 1) or (U[iv_dhv] == 1):
-#        vvi = config.VDC/2.
-#    if (U[iv_lv] == 1) or (U[iv_dlv] == 1):
-#        vvi = -config.VDC/2.
-#    if (U[iv_hw] == 1) or (U[iv_dhw] == 1):
-#        vwi = config.VDC/2.
-#    if (U[iv_lw] == 1) or (U[iv_dlw] == 1):
-#        vwi = -config.VDC/2.
-#
-#    #i_thr = 0.001 # current threshold saying that the phase is not conducting
-#    i_thr = 0. # current threshold saying that the phase is not conducting
-#    #if -i_thr < X[sv_iu] < i_thr:   # phase V & W are conducting current
-#    if not pux:   # phase V & W are conducting current
-#        vm = ((vvi + vwi) / 2.) - ((ev + ew) / 2.)
-#        vu = eu
-#        vv = vvi - vm
-#        vw = vwi - vm
-#    elif not pvx: # phase U & W are conducting current
-#        vm = ((vui + vwi) / 2.) - ((eu + ew) / 2.)
-#        vu = vui - vm
-#        vv = ev
-#        vw = vwi - vm
-#    elif not pwx: # phase U & V are conducting current
-#        vm = ((vui + vvi) / 2.) - ((eu + ev) / 2.)
-#        vu = vui - vm
-#        vv = vvi - vm
-#        vw = ew
-#    else:               # all phases are corducting current
-#        print "all phases are conducting!"
-#        vm = ((vui + vvi + vwi) / 3.) - ((eu + ev + ew) / 3.)
-#        vu = vui - vm
-#        vv = vvi - vm
-#        vw = vwi - vm
-#
 
 def output(X, U):
 
@@ -305,7 +176,6 @@ def output(X, U):
     Y = [X[sv_iu], X[sv_iv], X[sv_iw],
          V[ph_U], V[ph_V], V[ph_W],
          X[sv_theta], X[sv_omega]]
-
     return Y
 
 #
@@ -313,6 +183,7 @@ def output(X, U):
 #
 # X state, t time, U input, W perturbation
 #
+
 def dyn(X, t, U):
     Xd, Xdebug = dyn_debug(X, t, U)
     return Xd
@@ -321,13 +192,14 @@ def dyn(X, t, U):
 # Dynamic model with debug vector
 def dyn_debug(X, t, U):
     emf = np.zeros(3, dtype=float)
+
     max_bemf = (utils.VEL_RADS2RPM * X[sv_omega]) / config.Kv
 
     for phase in range(3):
         angle = utils.angle_2pi((X[sv_theta] * (config.NbPoles / 2.)) + phase*2*math.pi/3)
+        # BACK-EMF IS OF TRAPEZOIDAL SHAPE
         emf[phase] = max_bemf * utils.trapezoid(angle)
 
-    
     # Energy equation: torque =  (EM-energy) / omega
     etorque = np.dot(emf, X[sv_iu:sv_iw+1]) / X[sv_omega]
 
@@ -349,17 +221,11 @@ def dyn_debug(X, t, U):
 
     V = get_phase_voltages(X, U)
 
-    pdt = config.VDC/2 + config.dvf
-
-    iu_dot = (V[ph_U] - (config.R * X[sv_iu]) - emf[0] - V[ph_star]) / (config.L - config.M)
-    iv_dot = (V[ph_V] - (config.R * X[sv_iv]) - emf[1] - V[ph_star]) / (config.L - config.M)
-    iw_dot = (V[ph_W] - (config.R * X[sv_iw]) - emf[2] - V[ph_star]) / (config.L - config.M)
-
     Xd = [X[sv_omega],
           omega_dot,
-          (V[ph_U] - (config.R * X[sv_iu]) - emf[0] - V[ph_star]) / (config.L - config.M),
-          (V[ph_V] - (config.R * X[sv_iv]) - emf[1] - V[ph_star]) / (config.L - config.M),
-          (V[ph_W] - (config.R * X[sv_iw]) - emf[2] - V[ph_star]) / (config.L - config.M)
+          (V[ph_U] - (config.R * X[sv_iu]) - emf[0] - V[ph_star]) / (config.L - config.M), #diu/dt
+          (V[ph_V] - (config.R * X[sv_iv]) - emf[1] - V[ph_star]) / (config.L - config.M), #div/dt
+          (V[ph_W] - (config.R * X[sv_iw]) - emf[2] - V[ph_star]) / (config.L - config.M)  #diw/dt
     ]
 
     Xdebug = [

@@ -18,140 +18,109 @@
 #
 
 import numpy as np
+import math
 
 import dyn_model  as dm
-
 import utils
-
-import math
 import config
 
-PWM_freq = 16000
-PWM_cycle_time = (1./16000)
+PWM_freq = 16000.
+PWM_cycle_time = (1./PWM_freq)
 PWM_duty = 0.6
 PWM_duty_time = PWM_cycle_time * PWM_duty
 
 debug = False
 
-#
-#
-# Sp setpoint, Y output
-#
-def run_hpwm_l_on_bipol(Sp, Y, t):
+'''  Switching angle based on actual mechanical (And thus electrical / (nPoles/2)) angle measurement
+The switching pattern below uses the electrical angle to set the right switches at the right time.
+The on-time depends on the duty cycle and the pwm-frequency. 
+The startup is not handled, apparently the power is large enough to make the motor simply start running.
+
+'''
+def run_hpwm_l_on_bipol(Y, t):
+    
+    # Get the electrical angle
     elec_angle = utils.angle_2pi(Y[dm.ov_theta] * config.NbPoles/2)
 
+    # Switch states
     U = np.zeros(config.N_SWITCHES)
 
     step = "none"
 
-    # switching pattern based on the "encoder"
-    # H PWM L ON pattern
-    if 0. <= elec_angle <= (math.pi * (1./6.)): # second half of step 1
-        # U off
-        # V low
-        # W hpwm
-        hu = 0
-        lu = 0
-        hv = 0
-        lv = 1
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hw = 1
-        else:
-            hw = 0
-        lw = 0
-        step = "1b"
-    elif (math.pi * (1.0/6.0)) < elec_angle <= (math.pi * (3.0/6.0)): # step 2
-        # U hpwm
-        # V low
-        # W off
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hu = 1
-        else:
-            hu = 0
-        lu = 0
-        hv = 0
-        lv = 1
-        hw = 0
-        lw = 0
-        step = "2 "
-    elif (math.pi * (3.0/6.0)) < elec_angle <= (math.pi * (5.0/6.0)): # step 3
-        # U hpwm
-        # V off
-        # W low
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hu = 1
-        else:
-            hu = 0
-        lu = 0
-        hv = 0
-        lv = 0
-        hw = 0
-        lw = 1
-        step = "3 "
-    elif (math.pi * (5.0/6.0)) < elec_angle <= (math.pi * (7.0/6.0)): # step 4
-        # U off
-        # V hpwm
-        # W low
-        hu = 0
-        lu = 0
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hv = 1
-        else:
-            hv = 0
-        lv = 0
-        hw = 0
-        lw = 1
-        step = "4 "
-    elif (math.pi * (7.0/6.0)) < elec_angle <= (math.pi * (9.0/6.0)): # step 5
-        # U low
-        # V hpwm
-        # W off
-        hu = 0
-        lu = 1
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hv = 1
-        else:
-            hv = 0
-        lv = 0
-        hw = 0
-        lw = 0
-        step = "5 "
-    elif (math.pi * (9.0/6.0)) < elec_angle <= (math.pi * (11.0/6.0)): # step 6
-        # U low
-        # V off
-        # W hpwm
-        hu = 0
-        lu = 1
-        hv = 0
-        lv = 0
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hw = 1
-        else:
-            hw = 0
-        lw = 0
-        step = "6 "
-    elif (math.pi * (11.0/6.0)) < elec_angle <= (math.pi * (12.0/6.0)): # first half of step 1
-        # U off
-        # V low
-        # W hpwm
-        hu = 0
-        lu = 0
-        hv = 0
-        lv = 1
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hw = 1
-        else:
-            hw = 0
-        lw = 0
-        step = "1a"
-    else:
-        print('ERROR: The electrical angle is out of range!!!')
+    # Switching pattern based on the "encoder"
+    upper_b_arr = (math.pi/6.)*np.array([1., 3., 5., 7., 9., 11., 12.], dtype=np.float64)
+    upper_sw_arr = np.array([dm.iv_hw, dm.iv_hu, dm.iv_hu, dm.iv_hv, dm.iv_hv, dm.iv_hw, dm.iv_hw])
+    lower_b_arr = upper_b_arr - np.pi/6 # first and last step in steps of pi/6
+    lower_b_arr[1:6] -= np.pi/6 # Everything between 1 and 6 in steps of pi/3
+    lower_sw_arr = np.array([dm.iv_lv, dm.iv_lw, dm.iv_lw, dm.iv_lu, dm.iv_lu, dm.iv_lv, dm.iv_lv])
 
-    # Assigning the scheme phase values to the simulator phases
-    # "Connecting the controller wires to the motor" ^^
-    # This way we can for example decide which direction we want to turn the motor
-    U[dm.iv_hu] = hu
-    U[dm.iv_lu] = lu
+    # print(lower_b_arr)
+    for step in range(len(upper_b_arr)+1):
+        #print(f"lower: {lower_b_arr[step]} < {elec_angle} < {upper_b_arr[step]}")
+        if lower_b_arr[step] <= np.float(elec_angle) <= upper_b_arr[step]: # second half of step 1
+            # print(f"Step: {step}, angle: {elec_angle}")
+            U[lower_sw_arr[step]] = 1
+            if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
+                U[upper_sw_arr[step]] = 1
+            break
+
+    #? Why are v and w phases here switched in order to make it work?
+    #? Something to do with switching rotation direction
+    hv = U[dm.iv_hv]
+    lv = U[dm.iv_lv]
+    hw = U[dm.iv_hw]
+    lw = U[dm.iv_lw]
+
+    U[dm.iv_hv] = hw
+    U[dm.iv_lv] = lw
+    U[dm.iv_hw] = hv
+    U[dm.iv_lw] = lv
+
+    if debug:
+        print(f'time {t} step {step} eangle {utils.ANGLE_DEG2RAD * elec_angle} switches {U}')
+
+    return U
+
+###
+### Sensorless control
+###
+# Enable 2 phases at a time
+# Get the non-excited phase
+# Get the phase voltage there
+# If this phase voltage crosses zero compared to the neutral point: change switching sequence
+
+def sensorless(Y, t):
+    
+    # Get the electrical angle
+    elec_angle = utils.angle_2pi(Y[dm.ov_theta] * config.NbPoles/2)
+
+    # Switch states
+    U = np.zeros(config.N_SWITCHES)
+
+    step = "none"
+
+    # Switching pattern based on the "encoder"
+    upper_b_arr = (math.pi/6.)*np.array([1., 3., 5., 7., 9., 11., 12.], dtype=np.float64)
+    upper_sw_arr = np.array([dm.iv_hw, dm.iv_hu, dm.iv_hu, dm.iv_hv, dm.iv_hv, dm.iv_hw, dm.iv_hw])
+    lower_b_arr = upper_b_arr - np.pi/6 # first and last step in steps of pi/6
+    lower_b_arr[1:6] -= np.pi/6 # Everything between 1 and 6 in steps of pi/3
+    lower_sw_arr = np.array([dm.iv_lv, dm.iv_lw, dm.iv_lw, dm.iv_lu, dm.iv_lu, dm.iv_lv, dm.iv_lv])
+
+    # print(lower_b_arr)
+    for step in range(len(upper_b_arr)+1):
+        #print(f"lower: {lower_b_arr[step]} < {elec_angle} < {upper_b_arr[step]}")
+        if lower_b_arr[step] <= np.float(elec_angle) <= upper_b_arr[step]: # second half of step 1
+            # print(f"Step: {step}, angle: {elec_angle}")
+            U[lower_sw_arr[step]] = 1
+            if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
+                U[upper_sw_arr[step]] = 1
+            break
+
+    hv = U[dm.iv_hv]
+    lv = U[dm.iv_lv]
+    hw = U[dm.iv_hw]
+    lw = U[dm.iv_lw]
+
     U[dm.iv_hv] = hw
     U[dm.iv_lv] = lw
     U[dm.iv_hw] = hv
@@ -163,159 +132,8 @@ def run_hpwm_l_on_bipol(Sp, Y, t):
     return U
 
 #
-#
 # Sp setpoint, Y output
 #
-def run_hpwm_l_on(Sp, Y, t):
-    elec_angle = utils.angle_2pi(Y[dm.ov_theta] * config.NbPoles/2)
-
-    U = np.zeros(config.N_SWITCHES)
-
-    step = "none"
-
-    # switching pattern based on the "encoder"
-    # H PWM L ON pattern bipolar
-    if 0. <= elec_angle <= (math.pi * (1./6.)): # second half of step 1
-        # U off
-        # V low
-        # W hpwm
-        hu = 0
-        lu = 0
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hw = 1
-            lw = 0
-            hv = 0
-            lv = 1
-        else:
-            hw = 0
-            lw = 1
-            hv = 1
-            lv = 0
-        step = "1b"
-    elif (math.pi * (1.0/6.0)) < elec_angle <= (math.pi * (3.0/6.0)): # step 2
-        # U hpwm
-        # V low
-        # W off
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hu = 1
-            lu = 0
-            hv = 0
-            lv = 1
-        else:
-            hu = 0
-            lu = 1
-            hv = 1
-            lv = 0
-        hw = 0
-        lw = 0
-        step = "2 "
-    elif (math.pi * (3.0/6.0)) < elec_angle <= (math.pi * (5.0/6.0)): # step 3
-        # U hpwm
-        # V off
-        # W low
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hu = 1
-            lu = 0
-            hw = 0
-            lw = 1
-        else:
-            hu = 0
-            lu = 1
-            hw = 1
-            lw = 0
-        hv = 0
-        lv = 0
-        step = "3 "
-    elif (math.pi * (5.0/6.0)) < elec_angle <= (math.pi * (7.0/6.0)): # step 4
-        # U off
-        # V hpwm
-        # W low
-        hu = 0
-        lu = 0
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hv = 1
-            lv = 0
-            hw = 0
-            lw = 1
-        else:
-            hv = 0
-            lv = 1
-            hw = 1
-            lw = 0
-        step = "4 "
-    elif (math.pi * (7.0/6.0)) < elec_angle <= (math.pi * (9.0/6.0)): # step 5
-        # U low
-        # V hpwm
-        # W off
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hv = 1
-            lv = 0
-            hu = 0
-            lu = 1
-        else:
-            hv = 0
-            lv = 1
-            hu = 1
-            lu = 0
-        hw = 0
-        lw = 0
-        step = "5 "
-    elif (math.pi * (9.0/6.0)) < elec_angle <= (math.pi * (11.0/6.0)): # step 6
-        # U low
-        # V off
-        # W hpwm
-        hv = 0
-        lv = 0
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hw = 1
-            lw = 0
-            hu = 0
-            lu = 1
-        else:
-            hw = 0
-            lw = 1
-            hu = 1
-            lu = 0
-        step = "6 "
-    elif (math.pi * (11.0/6.0)) < elec_angle <= (math.pi * (12.0/6.0)): # first half of step 1
-        # U off
-        # V low
-        # W hpwm
-        hu = 0
-        lu = 0
-        if math.fmod(t, PWM_cycle_time) <= PWM_duty_time:
-            hw = 1
-            lw = 0
-            hv = 0
-            lv = 1
-        else:
-            hw = 0
-            lw = 1
-            hv = 1
-            lv = 0
-        step = "1a"
-    else:
-        print('ERROR: The electrical angle is out of range!!!')
-
-    # Assigning the scheme phase values to the simulator phases
-    # "Connecting the controller wires to the motor" ^^
-    # This way we can for example decide which direction we want to turn the motor
-    U[dm.iv_hu] = hu
-    U[dm.iv_lu] = lu
-    U[dm.iv_hv] = hw
-    U[dm.iv_lv] = lw
-    U[dm.iv_hw] = hv
-    U[dm.iv_lw] = lv
-
-    if debug:
-        print(f'time {t} step {step} eangle {utils.ANGLE_DEG2RAD * elec_angle} switches {U}')
-
-    return U
-
-
-#
-# Sp setpoint, Y output
-#
-def run(Sp, Y, t):
+def run(Y, t):
     #return run_hpwm_l_on(Sp, Y, t)
-    return run_hpwm_l_on_bipol(Sp, Y, t)
+    return run_hpwm_l_on_bipol(Y, t)
