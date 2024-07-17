@@ -66,15 +66,15 @@ def run_hpwm_l_on_bipol(Y, t):
 
     #? Why are v and w phases here switched in order to make it work?
     #? Something to do with switching rotation direction
-    hv = U[dm.iv_hv]
-    lv = U[dm.iv_lv]
-    hw = U[dm.iv_hw]
-    lw = U[dm.iv_lw]
+    # hv = U[dm.iv_hv]
+    # lv = U[dm.iv_lv]
+    # hw = U[dm.iv_hw]
+    # lw = U[dm.iv_lw]
 
-    U[dm.iv_hv] = hw
-    U[dm.iv_lv] = lw
-    U[dm.iv_hw] = hv
-    U[dm.iv_lw] = lv
+    # U[dm.iv_hv] = hw
+    # U[dm.iv_lv] = lw
+    # U[dm.iv_hw] = hv
+    # U[dm.iv_lw] = lv
 
     if debug:
         print(f'time {t} step {step} eangle {utils.ANGLE_DEG2RAD * elec_angle} switches {U}')
